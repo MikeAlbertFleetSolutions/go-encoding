@@ -32,13 +32,21 @@ func TestCreateWorkbook(t *testing.T) {
 	}
 
 	// write out some data
+	type subone struct {
+		OneField string `xls:"OneField"`
+	}
+	type subtwo struct {
+		TwoField string `xls:"TwoField"`
+		SubOne   subone
+	}
 	aas := []struct {
-		Number int    `xls:"Number,{\"number_format\":1}"`
+		Number int    `xls:"Number,{\"number_format\":2}"`
 		Name   string `xls:"Name"`
+		Sub    subtwo
 	}{
-		{1, "a"},
-		{2, "b"},
-		{3, "c"},
+		{1, "a", subtwo{TwoField: "aa", SubOne: subone{OneField: "aaa"}}},
+		{2, "b", subtwo{TwoField: "bb", SubOne: subone{OneField: "bbb"}}},
+		{3, "c", subtwo{TwoField: "cc", SubOne: subone{OneField: "ccc"}}},
 	}
 	for _, aa := range aas {
 		err = x.WriteRow("test", aa)

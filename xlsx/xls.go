@@ -12,6 +12,7 @@
 //	Field string `xls:"Number,{\"number_format\":1}"`
 //
 // see https://github.com/qax-os/excelize/blob/master/styles.go for format styles
+// only number_format is support for now
 //
 package xlsx
 
@@ -32,7 +33,7 @@ type Xlsx struct {
 	wroteHeader  map[string]bool
 	rowNum       map[string]int
 	headings     []string
-	styles       []string
+	styles       []*excelize.Style
 }
 
 // NewXlsx creates new Xlsx
@@ -57,24 +58,38 @@ func (xlsx *Xlsx) RemoveSheet(sheetName string) error {
 	return nil
 }
 
-func (xlsx *Xlsx) getRowHeadings(row interface{}) []string {
-	if xlsx.headings != nil {
-		return xlsx.headings
-	}
-
+func innerGetRowHeadings(row interface{}) []string {
+	fields := reflect.ValueOf(row)
 	t := reflect.TypeOf(row)
 
 	// iterate over all available fields and read the tag value to get what to put in the header
 	headings := make([]string, 0, t.NumField())
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
+		f := fields.Field(i)
 
-		tag := field.Tag.Get("xls")
-		if tag != "" {
-			hs := strings.Split(tag, ",")
-			headings = append(headings, hs[0])
+		k := f.Kind()
+		switch k {
+		case reflect.Struct:
+			headings = append(headings, innerGetRowHeadings(f.Interface())...)
+		default:
+			tag := field.Tag.Get("xls")
+			if tag != "" {
+				hs := strings.Split(tag, ",")
+				headings = append(headings, hs[0])
+			}
 		}
 	}
+
+	return headings
+}
+
+func (xlsx *Xlsx) getRowHeadings(row interface{}) []string {
+	if xlsx.headings != nil {
+		return xlsx.headings
+	}
+
+	headings := innerGetRowHeadings(row)
 
 	// cache for later
 	xlsx.headings = headings
@@ -82,28 +97,52 @@ func (xlsx *Xlsx) getRowHeadings(row interface{}) []string {
 	return headings
 }
 
-func (xlsx *Xlsx) getRowStyles(row interface{}) []string {
+//Style.NumFmt
+
+func innerGetRowStyles(row interface{}) []*excelize.Style {
+	fields := reflect.ValueOf(row)
+	t := reflect.TypeOf(row)
+
+	// iterate over all available fields and read the tag value to get the style
+	styles := make([]*excelize.Style, 0, t.NumField())
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		f := fields.Field(i)
+
+		k := f.Kind()
+		switch k {
+		case reflect.Struct:
+			styles = append(styles, innerGetRowStyles(f.Interface())...)
+		default:
+			tag := field.Tag.Get("xls")
+			if tag != "" {
+				hs := strings.Split(tag, ",")
+				if len(hs) > 1 {
+					// only support number format for now
+					var n int
+					_, err := fmt.Fscanf(strings.NewReader(hs[1]), "{\"number_format\":%d}", &n)
+					if err != nil {
+						log.Printf("%+v", err)
+						return nil
+					}
+
+					styles = append(styles, &excelize.Style{NumFmt: n})
+				} else {
+					styles = append(styles, nil)
+				}
+			}
+		}
+	}
+
+	return styles
+}
+
+func (xlsx *Xlsx) getRowStyles(row interface{}) []*excelize.Style {
 	if xlsx.styles != nil {
 		return xlsx.styles
 	}
 
-	t := reflect.TypeOf(row)
-
-	// iterate over all available fields and read the tag value to get the style
-	styles := make([]string, 0, t.NumField())
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-
-		tag := field.Tag.Get("xls")
-		if tag != "" {
-			hs := strings.Split(tag, ",")
-			if len(hs) > 1 {
-				styles = append(styles, hs[1])
-			} else {
-				styles = append(styles, "")
-			}
-		}
-	}
+	styles := innerGetRowStyles(row)
 
 	// cache for later
 	xlsx.styles = styles
@@ -111,32 +150,42 @@ func (xlsx *Xlsx) getRowStyles(row interface{}) []string {
 	return styles
 }
 
-func (xlsx *Xlsx) getRowData(row interface{}) []interface{} {
-	t := reflect.TypeOf(row)
+func innerGetRowData(row interface{}) []interface{} {
 	fields := reflect.ValueOf(row)
+	t := reflect.TypeOf(row)
 
 	// iterate over all available fields and read the value
-	values := make([]interface{}, 0, fields.NumField())
+	values := make([]interface{}, 0)
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
+		f := fields.Field(i)
 
-		tag := field.Tag.Get("xls")
-		if tag != "" {
-			f := fields.Field(i)
-			if f.Kind() == reflect.Pointer {
-				v := f.Elem()
-				if v.IsValid() {
-					values = append(values, f.Elem().Interface())
+		k := f.Kind()
+		switch k {
+		case reflect.Struct:
+			values = append(values, innerGetRowData(f.Interface())...)
+		default:
+			tag := field.Tag.Get("xls")
+			if tag != "" {
+				if f.Kind() == reflect.Pointer {
+					v := f.Elem()
+					if v.IsValid() {
+						values = append(values, f.Elem().Interface())
+					} else {
+						values = append(values, nil)
+					}
 				} else {
-					values = append(values, nil)
+					values = append(values, f.Interface())
 				}
-			} else {
-				values = append(values, f.Interface())
 			}
 		}
 	}
 
 	return values
+}
+
+func (xlsx *Xlsx) getRowData(row interface{}) []interface{} {
+	return innerGetRowData(row)
 }
 
 // WriteRow appends row contents to sheet named sheetName, creates a header row if this is the first row written to xlsx
@@ -148,14 +197,17 @@ func (xlsx *Xlsx) WriteRow(sheetName string, row interface{}) error {
 		return err
 	}
 
+	rowData := xlsx.getRowData(row)
+	log.Printf("rowData %+v", rowData)
+
 	if !xlsx.wroteHeader[sheetName] {
 		columns := xlsx.getRowHeadings(row)
 
 		// accumulate columnWidths
-		xlsx.columnWidths[sheetName] = make([]int, len(columns))
+		xlsx.columnWidths[sheetName] = make([]int, len(rowData))
 
 		// header styling
-		styleHeader, err := xlsx.x.NewStyle(`{"font":{"bold":true}}`)
+		styleHeader, err := xlsx.x.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
 		if err != nil {
 			log.Printf("%+v", err)
 			return err
@@ -186,20 +238,17 @@ func (xlsx *Xlsx) WriteRow(sheetName string, row interface{}) error {
 		}
 
 		// freeze header row
-		err = xlsx.x.SetPanes(sheetName, `{
-			"freeze": true,
-			"split": false,
-			"x_split": 0,
-			"y_split": 1,
-			"top_left_cell": "A2",
-			"active_pane": "bottomLeft",
-			"panes": [
-			{
-				"sqref": "A2",
-				"active_cell": "A2",
-				"pane": "bottomLeft"
-			}]
-		}`)
+		err = xlsx.x.SetPanes(sheetName, &excelize.Panes{
+			Freeze:      true,
+			Split:       false,
+			XSplit:      0,
+			YSplit:      1,
+			TopLeftCell: "A2",
+			ActivePane:  "bottomLeft",
+			Panes: []excelize.PaneOptions{
+				{SQRef: "A2", ActiveCell: "A2", Pane: "bottomLeft"},
+			},
+		})
 		if err != nil {
 			log.Printf("%+v", err)
 			return err
@@ -211,7 +260,7 @@ func (xlsx *Xlsx) WriteRow(sheetName string, row interface{}) error {
 	// write out cells
 	xlsx.rowNum[sheetName]++
 	styles := xlsx.getRowStyles(row)
-	for i, value := range xlsx.getRowData(row) {
+	for i, value := range rowData {
 		n, err := excelize.CoordinatesToCellName(i+1, xlsx.rowNum[sheetName])
 		if err != nil {
 			log.Printf("%+v", err)
@@ -227,7 +276,7 @@ func (xlsx *Xlsx) WriteRow(sheetName string, row interface{}) error {
 		xlsx.columnWidths[sheetName][i] = max(xlsx.columnWidths[sheetName][i], len(fmt.Sprintf("%v", value)))
 
 		// styling
-		if styles[i] != "" {
+		if styles[i] != nil {
 			style, err := xlsx.x.NewStyle(styles[i])
 			if err != nil {
 				log.Printf("%+v", err)
@@ -264,7 +313,7 @@ func (xlsx *Xlsx) closeSheet(sheetName string) error {
 	}
 
 	// turn on autofilter for each column with data in it
-	err := xlsx.x.AutoFilter(sheetName, "A1", fmt.Sprintf("%c1", rune('A'-1+len(xlsx.columnWidths[sheetName]))), "")
+	err := xlsx.x.AutoFilter(sheetName, fmt.Sprintf("A1:%c1", rune('A'-1+len(xlsx.columnWidths[sheetName]))), &excelize.AutoFilterOptions{})
 	if err != nil {
 		log.Printf("%+v", err)
 		return err
