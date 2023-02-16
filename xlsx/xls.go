@@ -97,8 +97,6 @@ func (xlsx *Xlsx) getRowHeadings(row interface{}) []string {
 	return headings
 }
 
-//Style.NumFmt
-
 func innerGetRowStyles(row interface{}) []*excelize.Style {
 	fields := reflect.ValueOf(row)
 	t := reflect.TypeOf(row)
@@ -198,8 +196,6 @@ func (xlsx *Xlsx) WriteRow(sheetName string, row interface{}) error {
 	}
 
 	rowData := xlsx.getRowData(row)
-	log.Printf("rowData %+v", rowData)
-
 	if !xlsx.wroteHeader[sheetName] {
 		columns := xlsx.getRowHeadings(row)
 
