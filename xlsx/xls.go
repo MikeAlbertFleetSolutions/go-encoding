@@ -31,8 +31,8 @@ type Xlsx struct {
 	columnWidths map[string][]int
 	wroteHeader  map[string]bool
 	rowNum       map[string]int
-	headings     []string
-	styles       []*excelize.Style
+	headings     map[string][]string
+	styles       map[string][]*excelize.Style
 }
 
 // NewXlsx creates new Xlsx
@@ -42,6 +42,8 @@ func NewXlsx() *Xlsx {
 		columnWidths: make(map[string][]int),
 		wroteHeader:  make(map[string]bool),
 		rowNum:       make(map[string]int),
+		headings:     make(map[string][]string),
+		styles:       make(map[string][]*excelize.Style),
 	}
 }
 
@@ -82,15 +84,15 @@ func innerGetRowHeadings(row interface{}) []string {
 	return headings
 }
 
-func (xlsx *Xlsx) getRowHeadings(row interface{}) []string {
-	if xlsx.headings != nil {
-		return xlsx.headings
+func (xlsx *Xlsx) getRowHeadings(sheetName string, row interface{}) []string {
+	if xlsx.headings[sheetName] != nil {
+		return xlsx.headings[sheetName]
 	}
 
 	headings := innerGetRowHeadings(row)
 
 	// cache for later
-	xlsx.headings = headings
+	xlsx.headings[sheetName] = headings
 
 	return headings
 }
@@ -133,15 +135,15 @@ func innerGetRowStyles(row interface{}) []*excelize.Style {
 	return styles
 }
 
-func (xlsx *Xlsx) getRowStyles(row interface{}) []*excelize.Style {
-	if xlsx.styles != nil {
-		return xlsx.styles
+func (xlsx *Xlsx) getRowStyles(sheetName string, row interface{}) []*excelize.Style {
+	if xlsx.styles[sheetName] != nil {
+		return xlsx.styles[sheetName]
 	}
 
 	styles := innerGetRowStyles(row)
 
 	// cache for later
-	xlsx.styles = styles
+	xlsx.styles[sheetName] = styles
 
 	return styles
 }
@@ -195,7 +197,7 @@ func (xlsx *Xlsx) WriteRow(sheetName string, row interface{}) error {
 
 	rowData := xlsx.getRowData(row)
 	if !xlsx.wroteHeader[sheetName] {
-		columns := xlsx.getRowHeadings(row)
+		columns := xlsx.getRowHeadings(sheetName, row)
 
 		// accumulate columnWidths
 		xlsx.columnWidths[sheetName] = make([]int, len(rowData))
@@ -253,7 +255,7 @@ func (xlsx *Xlsx) WriteRow(sheetName string, row interface{}) error {
 
 	// write out cells
 	xlsx.rowNum[sheetName]++
-	styles := xlsx.getRowStyles(row)
+	styles := xlsx.getRowStyles(sheetName, row)
 	for i, value := range rowData {
 		n, err := excelize.CoordinatesToCellName(i+1, xlsx.rowNum[sheetName])
 		if err != nil {
