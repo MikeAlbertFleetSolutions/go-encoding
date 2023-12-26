@@ -13,7 +13,6 @@
 //
 // see https://github.com/qax-os/excelize/blob/master/styles.go for format styles
 // only number_format is support for now
-//
 package xlsx
 
 import (
@@ -48,14 +47,13 @@ func NewXlsx() *Xlsx {
 
 // CreateSheet adds a new sheet to the workbook named sheetName
 func (xlsx *Xlsx) CreateSheet(sheetName string) error {
-	xlsx.x.NewSheet(sheetName)
-	return nil
+	_, err := xlsx.x.NewSheet(sheetName)
+	return err
 }
 
 // RemoveSheet delete the sheet named sheetName from the workbook
 func (xlsx *Xlsx) RemoveSheet(sheetName string) error {
-	xlsx.x.DeleteSheet(sheetName)
-	return nil
+	return xlsx.x.DeleteSheet(sheetName)
 }
 
 func innerGetRowHeadings(row interface{}) []string {
@@ -241,7 +239,7 @@ func (xlsx *Xlsx) WriteRow(sheetName string, row interface{}) error {
 			YSplit:      1,
 			TopLeftCell: "A2",
 			ActivePane:  "bottomLeft",
-			Panes: []excelize.PaneOptions{
+			Selection: []excelize.Selection{
 				{SQRef: "A2", ActiveCell: "A2", Pane: "bottomLeft"},
 			},
 		})
@@ -309,7 +307,7 @@ func (xlsx *Xlsx) closeSheet(sheetName string) error {
 	}
 
 	// turn on autofilter for each column with data in it
-	err := xlsx.x.AutoFilter(sheetName, fmt.Sprintf("A1:%c1", rune('A'-1+len(xlsx.columnWidths[sheetName]))), &excelize.AutoFilterOptions{})
+	err := xlsx.x.AutoFilter(sheetName, fmt.Sprintf("A1:%c1", rune('A'-1+len(xlsx.columnWidths[sheetName]))), []excelize.AutoFilterOptions{})
 	if err != nil {
 		log.Printf("%+v", err)
 		return err
