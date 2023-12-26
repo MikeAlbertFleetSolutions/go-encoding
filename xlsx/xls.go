@@ -309,7 +309,12 @@ func (xlsx *Xlsx) closeSheet(sheetName string) error {
 	}
 
 	// turn on autofilter for each column with data in it
-	err := xlsx.x.AutoFilter(sheetName, fmt.Sprintf("A1:%c1", rune('A'-1+len(xlsx.columnWidths[sheetName]))), []excelize.AutoFilterOptions{})
+	n, err := excelize.ColumnNumberToName(len(xlsx.columnWidths[sheetName]))
+	if err != nil {
+		log.Printf("%+v", err)
+		return err
+	}
+	err = xlsx.x.AutoFilter(sheetName, fmt.Sprintf("A1:%s1", n), []excelize.AutoFilterOptions{})
 	if err != nil {
 		log.Printf("%+v", err)
 		return err
