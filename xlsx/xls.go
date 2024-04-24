@@ -21,6 +21,7 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -67,17 +68,17 @@ func innerGetRowHeadings(row interface{}) []string {
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		f := fields.Field(i)
-
 		k := f.Kind()
-		switch k {
-		case reflect.Struct:
-			headings = append(headings, innerGetRowHeadings(f.Interface())...)
-		default:
+		_, isTime := f.Interface().(time.Time)
+
+		if isTime || (k != reflect.Struct) {
 			tag := field.Tag.Get("xls")
 			if tag != "" {
 				hs := strings.Split(tag, ",")
 				headings = append(headings, hs[0])
 			}
+		} else {
+			headings = append(headings, innerGetRowHeadings(f.Interface())...)
 		}
 	}
 
@@ -106,12 +107,10 @@ func innerGetRowStyles(row interface{}) []*excelize.Style {
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		f := fields.Field(i)
-
 		k := f.Kind()
-		switch k {
-		case reflect.Struct:
-			styles = append(styles, innerGetRowStyles(f.Interface())...)
-		default:
+		_, isTime := f.Interface().(time.Time)
+
+		if isTime || (k != reflect.Struct) {
 			tag := field.Tag.Get("xls")
 			if tag != "" {
 				hs := strings.Split(tag, ",")
@@ -129,6 +128,8 @@ func innerGetRowStyles(row interface{}) []*excelize.Style {
 					styles = append(styles, nil)
 				}
 			}
+		} else {
+			styles = append(styles, innerGetRowStyles(f.Interface())...)
 		}
 	}
 
@@ -157,12 +158,10 @@ func innerGetRowData(row interface{}) []interface{} {
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		f := fields.Field(i)
-
 		k := f.Kind()
-		switch k {
-		case reflect.Struct:
-			values = append(values, innerGetRowData(f.Interface())...)
-		default:
+		_, isTime := f.Interface().(time.Time)
+
+		if isTime || (k != reflect.Struct) {
 			tag := field.Tag.Get("xls")
 			if tag != "" {
 				if f.Kind() == reflect.Pointer {
@@ -176,6 +175,8 @@ func innerGetRowData(row interface{}) []interface{} {
 					values = append(values, f.Interface())
 				}
 			}
+		} else {
+			values = append(values, innerGetRowData(f.Interface())...)
 		}
 	}
 

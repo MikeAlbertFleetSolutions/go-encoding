@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestMain(m *testing.M) {
@@ -40,13 +41,14 @@ func TestCreateWorkbook(t *testing.T) {
 		SubOne   subone
 	}
 	aas := []struct {
-		Number int    `xls:"Number,{\"number_format\":2}"`
-		Name   string `xls:"Name"`
-		Sub    subtwo
+		Number    int       `xls:"Number,{\"number_format\":2}"`
+		Name      string    `xls:"Name"`
+		TimeField time.Time `xls:"Requested Date,{\"number_format\":14}"`
+		Sub       subtwo
 	}{
-		{1, "a", subtwo{TwoField: "aa", SubOne: subone{OneField: "aaa"}}},
-		{2, "b", subtwo{TwoField: "bb", SubOne: subone{OneField: "bbb"}}},
-		{3, "c", subtwo{TwoField: "cc", SubOne: subone{OneField: "ccc"}}},
+		{1, "a", time.Now(), subtwo{TwoField: "aa", SubOne: subone{OneField: "aaa"}}},
+		{2, "b", time.Now().Add(2 * time.Hour), subtwo{TwoField: "bb", SubOne: subone{OneField: "bbb"}}},
+		{3, "c", time.Now().Add(3 * 24 * time.Hour), subtwo{TwoField: "cc", SubOne: subone{OneField: "ccc"}}},
 	}
 	for _, aa := range aas {
 		err = x.WriteRow("test", aa)
