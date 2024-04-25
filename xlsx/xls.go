@@ -48,6 +48,21 @@ func NewXlsx() *Xlsx {
 	}
 }
 
+func isTime(f reflect.Value) bool {
+	isTime := false
+	if f.Kind() == reflect.Pointer {
+		v := f.Elem()
+
+		if v.IsValid() {
+			isTime = v.CanConvert(reflect.TypeOf(time.Time{}))
+		}
+	} else {
+		isTime = f.CanConvert(reflect.TypeOf(time.Time{}))
+	}
+
+	return isTime
+}
+
 // CreateSheet adds a new sheet to the workbook named sheetName
 func (xlsx *Xlsx) CreateSheet(sheetName string) error {
 	_, err := xlsx.x.NewSheet(sheetName)
@@ -69,9 +84,8 @@ func innerGetRowHeadings(row interface{}) []string {
 		field := t.Field(i)
 		f := fields.Field(i)
 		k := f.Kind()
-		_, isTime := f.Interface().(time.Time)
 
-		if isTime || (k != reflect.Struct) {
+		if isTime(f) || (k != reflect.Struct) {
 			tag := field.Tag.Get("xls")
 			if tag != "" {
 				hs := strings.Split(tag, ",")
@@ -108,9 +122,8 @@ func innerGetRowStyles(row interface{}) []*excelize.Style {
 		field := t.Field(i)
 		f := fields.Field(i)
 		k := f.Kind()
-		_, isTime := f.Interface().(time.Time)
 
-		if isTime || (k != reflect.Struct) {
+		if isTime(f) || (k != reflect.Struct) {
 			tag := field.Tag.Get("xls")
 			if tag != "" {
 				hs := strings.Split(tag, ",")
@@ -159,20 +172,31 @@ func innerGetRowData(row interface{}) []interface{} {
 		field := t.Field(i)
 		f := fields.Field(i)
 		k := f.Kind()
-		_, isTime := f.Interface().(time.Time)
 
+		isTime := isTime(f)
 		if isTime || (k != reflect.Struct) {
 			tag := field.Tag.Get("xls")
 			if tag != "" {
 				if f.Kind() == reflect.Pointer {
 					v := f.Elem()
+
 					if v.IsValid() {
-						values = append(values, f.Elem().Interface())
+						if isTime {
+							vt := v.Convert(reflect.TypeOf(time.Time{}))
+							values = append(values, vt.Interface())
+						} else {
+							values = append(values, v.Interface())
+						}
 					} else {
 						values = append(values, nil)
 					}
 				} else {
-					values = append(values, f.Interface())
+					if isTime {
+						ft := f.Convert(reflect.TypeOf(time.Time{}))
+						values = append(values, ft.Interface())
+					} else {
+						values = append(values, f.Interface())
+					}
 				}
 			}
 		} else {
